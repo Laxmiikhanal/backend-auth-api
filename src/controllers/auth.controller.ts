@@ -1,78 +1,216 @@
-import { UserService } from "../services/user.service";
-import { CreateUserDTO, LoginUserDTO } from "../dtos/user.dto";
+import { AuthService } from "../services/auth.service";
+import { CreateUserDto, LoginUserDto, UpdateUserDto } from "../dtos/user.dto";
 import { Request, Response } from "express";
-import z from "zod";
 
-const userService = new UserService();
+const authService = new AuthService();
 
 export class AuthController {
+  // ---------- aliases ----------
   async register(req: Request, res: Response) {
-    try {
-      // Validate request body using Zod DTO
-      const parsedData = CreateUserDTO.safeParse(req.body);
+    return this.registerUser(req, res);
+  }
 
-      if (!parsedData.success) {
+  async login(req: Request, res: Response) {
+    return this.loginUser(req, res);
+  }
+
+  async whoami(req: Request, res: Response) {
+    return this.getUserProfile(req, res);
+  }
+
+  async update(req: Request, res: Response) {
+    return this.updateUser(req, res);
+  }
+
+  // ---------- REGISTER ----------
+  async registerUser(req: Request, res: Response) {
+    try {
+      const parsed = CreateUserDto.safeParse(req.body);
+
+      if (!parsed.success) {
         return res.status(400).json({
           success: false,
-          message: z.prettifyError(parsedData.error),
+          message: parsed.error.issues.map((i) => i.message).join(", "),
         });
       }
 
-      const userData: CreateUserDTO = parsedData.data;
-      const newUser = await userService.createUser(userData);
+      const data: any = parsed.data;
 
-      // Remove password before sending response
-      const userObj =
-        typeof (newUser as any).toObject === "function"
-          ? (newUser as any).toObject()
-          : newUser;
+      // image upload optional
+      if ((req as any).file) {
+        data.imageUrl = `/uploads/${(req as any).file.filename}`;
+      }
 
-      const { password, ...safeUser } = userObj;
+      const newUser = await authService.registerUser(data);
 
       return res.status(201).json({
         success: true,
-        message: "User registered successfully",
-        data: safeUser,
+        data: newUser,
+        message: "Registered Success",
       });
     } catch (error: any) {
-      return res.status(error.statusCode ?? 500).json({
+      return res.status(error.statusCode || 500).json({
         success: false,
         message: error.message || "Internal Server Error",
       });
     }
   }
 
-  async login(req: Request, res: Response) {
+  // ---------- LOGIN ----------
+  async loginUser(req: Request, res: Response) {
     try {
-      // Validate login request body using Zod DTO
-      const parsedData = LoginUserDTO.safeParse(req.body);
+      const parsed = LoginUserDto.safeParse(req.body);
 
-      if (!parsedData.success) {
+      if (!parsed.success) {
         return res.status(400).json({
           success: false,
-          message: z.prettifyError(parsedData.error),
+          message: parsed.error.issues.map((i) => i.message).join(", "),
         });
       }
 
-      const loginData: LoginUserDTO = parsedData.data;
-      const { token, user } = await userService.loginUser(loginData);
-
-      // Remove password before sending response
-      const userObj =
-        typeof (user as any).toObject === "function"
-          ? (user as any).toObject()
-          : user;
-
-      const { password, ...safeUser } = userObj;
+      const { token, user } = await authService.loginUser(parsed.data);
 
       return res.status(200).json({
         success: true,
-        message: "Login successful",
-        data: safeUser,
+        data: user,
         token,
+        message: "Login success",
       });
     } catch (error: any) {
-      return res.status(error.statusCode ?? 500).json({
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Internal Server Error",
+      });
+    }
+  }
+
+  // ---------- WHOAMI ----------
+  async getUserProfile(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?._id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const user = await authService.getUserById(userId);
+
+      return res.status(200).json({
+        success: true,
+        data: user,
+        message: "User profile fetched successfully",
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Internal Server Error",
+      });
+    }
+  }
+
+  // ✅ REQUIRED BY SPRINT: POST /api/auth/user (admin creates user)
+  async createUser(req: Request, res: Response) {
+    try {
+      const loggedUser = (req as any).user;
+
+      if (!loggedUser?._id) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      // MUST be admin (route also should enforce adminMiddelware)
+      if (loggedUser.role !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: Admin only",
+        });
+      }
+
+      const parsed = CreateUserDto.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues.map((i) => i.message).join(", "),
+        });
+      }
+
+      const data: any = parsed.data;
+
+      // image upload optional
+      if ((req as any).file) {
+        data.imageUrl = `/uploads/${(req as any).file.filename}`;
+      }
+
+      // reuse register logic in service
+      const newUser = await authService.registerUser(data);
+
+      return res.status(201).json({
+        success: true,
+        data: newUser,
+        message: "User created successfully",
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Internal Server Error",
+      });
+    }
+  }
+
+  // ✅ REQUIRED BY SPRINT: PUT /api/auth/:id (logged user updates self; admin can update anyone)
+  async updateUser(req: Request, res: Response) {
+    try {
+      const loggedId = (req as any).user?._id;
+      const loggedRole = (req as any).user?.role;
+
+      if (!loggedId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const targetId = req.params.id; // ✅ uses :id from route
+
+      // allow self OR admin
+      if (targetId !== loggedId && loggedRole !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden",
+        });
+      }
+
+      const parsed = UpdateUserDto.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues.map((i) => i.message).join(", "),
+        });
+      }
+
+      const data: any = parsed.data;
+
+      // image upload optional
+      if ((req as any).file) {
+        data.imageUrl = `/uploads/${(req as any).file.filename}`;
+      }
+
+      const updatedUser = await authService.updateUser(targetId, data);
+
+      return res.status(200).json({
+        success: true,
+        data: updatedUser,
+        message: "User updated successfully",
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
         success: false,
         message: error.message || "Internal Server Error",
       });
