@@ -1,51 +1,62 @@
 import { Router } from "express";
 import { AdminUserController } from "../../controllers/admin/user.controller";
-import { authorizedMiddelWare, adminMiddelware } from "../../middlewares/authorized.middleware";
-import { uploads } from "../../middlewares/upload.middleware";
+import {
+  authorizedMiddelWare,
+  adminMiddelware,
+} from "../../middlewares/authorized.middleware";
+import { upload } from "../../middlewares/upload.middleware";
 
 const router = Router();
-const adminUserController = new AdminUserController();
+const controller = new AdminUserController();
 
-// POST /api/admin/users  (create + image)
+// ✅ TEST route (MUST be before "/:id")
+router.get(
+  "/test",
+  authorizedMiddelWare,
+  adminMiddelware,
+  (req, res) => res.status(200).json({ success: true, message: "Admin test route works" })
+);
+
+// ✅ CREATE user
 router.post(
   "/",
   authorizedMiddelWare,
   adminMiddelware,
-  uploads.single("image"),
-  (req, res) => adminUserController.createUser(req, res)
+  upload.single("image"),
+  (req, res) => controller.createUser(req, res)
 );
 
-// GET /api/admin/users  (all users)
+// ✅ GET all users
 router.get(
   "/",
   authorizedMiddelWare,
   adminMiddelware,
-  (req, res) => adminUserController.getUsers(req, res)
+  (req, res) => controller.getUsers(req, res)
 );
 
-// GET /api/admin/users/:id  (single user)
+// ✅ GET user by id
 router.get(
   "/:id",
   authorizedMiddelWare,
   adminMiddelware,
-  (req, res) => adminUserController.getUserById(req, res)
+  (req, res) => controller.getUserById(req, res)
 );
 
-// PUT /api/admin/users/:id  (update + optional image)
+// ✅ UPDATE user
 router.put(
   "/:id",
   authorizedMiddelWare,
   adminMiddelware,
-  uploads.single("image"),
-  (req, res) => adminUserController.updateUser(req, res)
+  upload.single("image"),
+  (req, res) => controller.updateUser(req, res)
 );
 
-// DELETE /api/admin/users/:id
+// ✅ DELETE user
 router.delete(
   "/:id",
   authorizedMiddelWare,
   adminMiddelware,
-  (req, res) => adminUserController.deleteUser(req, res)
+  (req, res) => controller.deleteUser(req, res)
 );
 
 export default router;
