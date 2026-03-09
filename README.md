@@ -144,7 +144,6 @@ Request - /api/auth/register
 ```json
 {
   "email": "test@test.com",
-  "username": "test",
   "password": "passpass",
   "confirmPassword": "passpass",
   "firstName": "Mero Name",

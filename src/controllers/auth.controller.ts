@@ -1,81 +1,73 @@
-import { UserService } from "../services/user.service";
-import { CreateUserDTO, LoginUserDTO } from "../dtos/user.dto";
 import { Request, Response } from "express";
-import z from "zod";
+import { AuthRepository } from "../repositories/auth.repository";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../config";
 
-const userService = new UserService();
+const authRepository = new AuthRepository();
 
-export class AuthController {
-  async register(req: Request, res: Response) {
-    try {
-      // Validate request body using Zod DTO
-      const parsedData = CreateUserDTO.safeParse(req.body);
+// ---------------- REGISTER ----------------
+export const registerUser = async (req: Request, res: Response) => {
+  try {
+    const { firstName, lastName, email, password, role } = req.body;
 
-      if (!parsedData.success) {
-        return res.status(400).json({
-          success: false,
-          message: z.prettifyError(parsedData.error),
-        });
-      }
-
-      const userData: CreateUserDTO = parsedData.data;
-      const newUser = await userService.createUser(userData);
-
-      // Remove password before sending response
-      const userObj =
-        typeof (newUser as any).toObject === "function"
-          ? (newUser as any).toObject()
-          : newUser;
-
-      const { password, ...safeUser } = userObj;
-
-      return res.status(201).json({
-        success: true,
-        message: "User registered successfully",
-        data: safeUser,
-      });
-    } catch (error: any) {
-      return res.status(error.statusCode ?? 500).json({
-        success: false,
-        message: error.message || "Internal Server Error",
-      });
+    const existingUser = await authRepository.getUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "Email already exists" });
     }
+
+    const user = await authRepository.createUser({ firstName, lastName, email, password, role });
+
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(201).json({
+      success: true,
+      data: { user, token },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || "Failed to register" });
   }
+};
 
-  async login(req: Request, res: Response) {
-    try {
-      // Validate login request body using Zod DTO
-      const parsedData = LoginUserDTO.safeParse(req.body);
+// ---------------- LOGIN ----------------
+export const loginUser = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
 
-      if (!parsedData.success) {
-        return res.status(400).json({
-          success: false,
-          message: z.prettifyError(parsedData.error),
-        });
-      }
-
-      const loginData: LoginUserDTO = parsedData.data;
-      const { token, user } = await userService.loginUser(loginData);
-
-      // Remove password before sending response
-      const userObj =
-        typeof (user as any).toObject === "function"
-          ? (user as any).toObject()
-          : user;
-
-      const { password, ...safeUser } = userObj;
-
-      return res.status(200).json({
-        success: true,
-        message: "Login successful",
-        data: safeUser,
-        token,
-      });
-    } catch (error: any) {
-      return res.status(error.statusCode ?? 500).json({
-        success: false,
-        message: error.message || "Internal Server Error",
-      });
+    const user = await authRepository.getUserByEmail(email);
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid email or password" });
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Invalid email or password" });
+    }
+
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(200).json({
+      success: true,
+      data: { user, token },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || "Failed to login" });
   }
-}
+};
+
+// ---------------- GET CURRENT USER ----------------
+export const getCurrentUser = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || "Failed to get user" });
+  }
+};
