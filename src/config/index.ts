@@ -1,12 +1,14 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 dotenv.config();
 
 export const PORT: number = 
-    process.env.PORT ? parseInt(process.env.PORT) : 3000;
-export const MONGODB_URI: string = 
-    process.env.MONGODB_URI || 'mongodb://localhost:27017/defaultdb';
-// Application level constants, with fallbacks 
-// if .env variables are not set
+    process.env.PORT ? parseInt(process.env.PORT) : 5050;
+// ensure PORT is a number, and fallback if not found
+// avoid exception if env is missing
+export const MONGO_URI: string =
+    process.env.MONGO_URI || 'mongodb://localhost:27017/35c_database';
+// fallback to local mongo db if env is missing
 
+// Application level CONSTANTS
 export const JWT_SECRET: string = 
-    process.env.JWT_SECRET || 'default'
+    process.env.JWT_SECRET || 'default';
